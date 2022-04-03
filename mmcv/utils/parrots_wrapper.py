@@ -85,7 +85,9 @@ def _get_norm():
     else:
         from torch.nn.modules.batchnorm import _BatchNorm
         from torch.nn.modules.instancenorm import _InstanceNorm
-        SyncBatchNorm_ = torch.nn.SyncBatchNorm
+        from byteps.torch.sync_batch_norm import SyncBatchNorm
+        # SyncBatchNorm_ = torch.nn.SyncBatchNorm
+        SyncBatchNorm_ = SyncBatchNorm
     return _BatchNorm, _InstanceNorm, SyncBatchNorm_
 
 

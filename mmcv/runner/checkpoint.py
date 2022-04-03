@@ -10,6 +10,7 @@ from collections import OrderedDict
 from importlib import import_module
 from tempfile import TemporaryDirectory
 
+import byteps.torch as bps
 import torch
 import torchvision
 from torch.optim import Optimizer
@@ -289,7 +290,10 @@ def load_from_http(filename, map_location=None, model_dir=None):
         checkpoint = load_url(
             filename, model_dir=model_dir, map_location=map_location)
     if world_size > 1:
-        torch.distributed.barrier()
+        # torch.distributed.barrier()
+        barrier_tensor = torch.ones(1).cuda()
+        with torch.no_grad():
+            bps.push_pull(barrier_tensor, name='barrier')
         if rank > 0:
             checkpoint = load_url(
                 filename, model_dir=model_dir, map_location=map_location)

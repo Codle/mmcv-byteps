@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import time
 
+import byteps.torch as bps
 import torch
 import torch.distributed as dist
 
@@ -122,12 +123,17 @@ def collect_results_cpu(result_part, size, tmpdir=None):
                 bytearray(tmpdir.encode()), dtype=torch.uint8, device='cuda')
             dir_tensor[:len(tmpdir)] = tmpdir
         dist.broadcast(dir_tensor, 0)
+        # bps.push_pull(dir_tensor, False, "dir_tensor")
         tmpdir = dir_tensor.cpu().numpy().tobytes().decode().rstrip()
     else:
         mmcv.mkdir_or_exist(tmpdir)
     # dump the part result to the dir
     mmcv.dump(result_part, osp.join(tmpdir, f'part_{rank}.pkl'))
-    dist.barrier()
+    # dist.barrier()
+    barrier_tensor = torch.ones(1).cuda()
+    with torch.no_grad():
+        bps.push_pull(barrier_tensor, name='barrier')
+
     # collect all parts
     if rank != 0:
         return None

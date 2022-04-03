@@ -1,10 +1,9 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import torch
-from torch.nn.parallel.distributed import (DistributedDataParallel,
-                                           _find_tensors)
 
-from mmcv import print_log
-from mmcv.utils import TORCH_VERSION, digit_version
+from byteps.torch.parallel import DistributedDataParallel
+
+# from mmcv import print_log
+# from mmcv.utils import TORCH_VERSION, digit_version
 from .scatter_gather import scatter_kwargs
 
 
@@ -17,6 +16,22 @@ class MMDistributedDataParallel(DistributedDataParallel):
       flexible control of input data.
     - It implement two APIs ``train_step()`` and ``val_step()``.
     """
+
+    def __init__(
+        self,
+        module,
+        device_ids=None,
+        output_device=None,
+        dim=0,
+        broadcast_buffers=True,
+        find_unused_parameters=False,
+    ):
+
+        super(MMDistributedDataParallel, self).__init__(
+            module, device_ids, broadcast_buffers
+        )
+        self.dim = dim
+        self.output_device = output_device
 
     def to_kwargs(self, inputs, kwargs, device_id):
         # Use `self.to_kwargs` instead of `self.scatter` in pytorch1.8
@@ -37,49 +52,37 @@ class MMDistributedDataParallel(DistributedDataParallel):
 
         # In PyTorch >= 1.7, ``reducer._rebuild_buckets()`` is moved from the
         # end of backward to the beginning of forward.
-        if ('parrots' not in TORCH_VERSION
-                and digit_version(TORCH_VERSION) >= digit_version('1.7')
-                and self.reducer._rebuild_buckets()):
-            print_log(
-                'Reducer buckets have been rebuilt in this iteration.',
-                logger='mmcv')
+        # if ('parrots' not in TORCH_VERSION
+        #         and digit_version(TORCH_VERSION) >= digit_version('1.7')
+        #         and self.reducer._rebuild_buckets()):
+        #     print_log(
+        #         'Reducer buckets have been rebuilt in this iteration.',
+        #         logger='mmcv')
 
-        if ('parrots' not in TORCH_VERSION
-                and digit_version(TORCH_VERSION) >= digit_version('1.11.0')):
-            if self._check_sync_bufs_pre_fwd():
-                self._sync_buffers()
-        else:
-            if (getattr(self, 'require_forward_param_sync', False)
-                    and self.require_forward_param_sync):
-                self._sync_params()
-
+        if getattr(self, 'require_forward_param_sync', True):
+            self._sync_params()
         if self.device_ids:
             inputs, kwargs = self.scatter(inputs, kwargs, self.device_ids)
             if len(self.device_ids) == 1:
                 output = self.module.train_step(*inputs[0], **kwargs[0])
             else:
                 outputs = self.parallel_apply(
-                    self._module_copies[:len(inputs)], inputs, kwargs)
+                    self._module_copies[: len(inputs)], inputs, kwargs
+                )
                 output = self.gather(outputs, self.output_device)
         else:
             output = self.module.train_step(*inputs, **kwargs)
 
-        if ('parrots' not in TORCH_VERSION
-                and digit_version(TORCH_VERSION) >= digit_version('1.11.0')):
-            if self._check_sync_bufs_post_fwd():
-                self._sync_buffers()
-
-        if (torch.is_grad_enabled()
-                and getattr(self, 'require_backward_grad_sync', False)
-                and self.require_backward_grad_sync):
-            if self.find_unused_parameters:
-                self.reducer.prepare_for_backward(list(_find_tensors(output)))
-            else:
-                self.reducer.prepare_for_backward([])
-        else:
-            if ('parrots' not in TORCH_VERSION
-                    and digit_version(TORCH_VERSION) > digit_version('1.2')):
-                self.require_forward_param_sync = False
+        # if torch.is_grad_enabled() and getattr(
+        #         self, 'require_backward_grad_sync', True):
+        #     if self.find_unused_parameters:
+        #         self.reducer.prepare_for_backward(list(_find_tensors(output)))
+        #     else:
+        #         self.reducer.prepare_for_backward([])
+        # else:
+        #     if ('parrots' not in TORCH_VERSION
+        #             and digit_version(TORCH_VERSION) > digit_version('1.2')):
+        #         self.require_forward_param_sync = False
         return output
 
     def val_step(self, *inputs, **kwargs):
@@ -92,47 +95,53 @@ class MMDistributedDataParallel(DistributedDataParallel):
         """
         # In PyTorch >= 1.7, ``reducer._rebuild_buckets()`` is moved from the
         # end of backward to the beginning of forward.
-        if ('parrots' not in TORCH_VERSION
-                and digit_version(TORCH_VERSION) >= digit_version('1.7')
-                and self.reducer._rebuild_buckets()):
-            print_log(
-                'Reducer buckets have been rebuilt in this iteration.',
-                logger='mmcv')
+        # if ('parrots' not in TORCH_VERSION
+        #         and digit_version(TORCH_VERSION) >= digit_version('1.7')
+        #         and self.reducer._rebuild_buckets()):
+        #     print_log(
+        #         'Reducer buckets have been rebuilt in this iteration.',
+        #         logger='mmcv')
 
-        if ('parrots' not in TORCH_VERSION
-                and digit_version(TORCH_VERSION) >= digit_version('1.11.0')):
-            if self._check_sync_bufs_pre_fwd():
-                self._sync_buffers()
-        else:
-            if (getattr(self, 'require_forward_param_sync', False)
-                    and self.require_forward_param_sync):
-                self._sync_params()
-
+        if getattr(self, 'require_forward_param_sync', True):
+            self._sync_params()
         if self.device_ids:
             inputs, kwargs = self.scatter(inputs, kwargs, self.device_ids)
             if len(self.device_ids) == 1:
                 output = self.module.val_step(*inputs[0], **kwargs[0])
             else:
                 outputs = self.parallel_apply(
-                    self._module_copies[:len(inputs)], inputs, kwargs)
+                    self._module_copies[: len(inputs)], inputs, kwargs
+                )
                 output = self.gather(outputs, self.output_device)
         else:
             output = self.module.val_step(*inputs, **kwargs)
 
-        if ('parrots' not in TORCH_VERSION
-                and digit_version(TORCH_VERSION) >= digit_version('1.11.0')):
-            if self._check_sync_bufs_post_fwd():
-                self._sync_buffers()
+        # if torch.is_grad_enabled() and getattr(
+        #         self, 'require_backward_grad_sync', True):
+        #     if self.find_unused_parameters:
+        #         self.reducer.prepare_for_backward(list(_find_tensors(output)))
+        #     else:
+        #         self.reducer.prepare_for_backward([])
+        # else:
+        #     if ('parrots' not in TORCH_VERSION
+        #             and digit_version(TORCH_VERSION) > digit_version('1.2')):
+        #         self.require_forward_param_sync = False
+        return output
 
-        if (torch.is_grad_enabled()
-                and getattr(self, 'require_backward_grad_sync', False)
-                and self.require_backward_grad_sync):
-            if self.find_unused_parameters:
-                self.reducer.prepare_for_backward(list(_find_tensors(output)))
+    def forward(self, *inputs, **kwargs):
+
+        if getattr(self, 'require_forward_param_sync', True):
+            self._sync_params()
+        if self.device_ids:
+            inputs, kwargs = self.scatter(inputs, kwargs, self.device_ids)
+            if len(self.device_ids) == 1:
+                output = self.module(*inputs[0], **kwargs[0])
             else:
-                self.reducer.prepare_for_backward([])
+                outputs = self.parallel_apply(
+                    self._module_copies[: len(inputs)], inputs, kwargs
+                )
+                output = self.gather(outputs, self.output_device)
         else:
-            if ('parrots' not in TORCH_VERSION
-                    and digit_version(TORCH_VERSION) > digit_version('1.2')):
-                self.require_forward_param_sync = False
+            output = self.module(*inputs, **kwargs)
+
         return output

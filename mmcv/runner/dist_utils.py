@@ -4,6 +4,7 @@ import os
 import subprocess
 from collections import OrderedDict
 
+import byteps.torch as bps
 import torch
 import torch.multiprocessing as mp
 from torch import distributed as dist
@@ -20,6 +21,8 @@ def init_dist(launcher, backend='nccl', **kwargs):
         _init_dist_mpi(backend, **kwargs)
     elif launcher == 'slurm':
         _init_dist_slurm(backend, **kwargs)
+    elif launcher == 'byteps':
+        _init_dist_byteps()
     else:
         raise ValueError(f'Invalid launcher type: {launcher}')
 
@@ -75,13 +78,23 @@ def _init_dist_slurm(backend, port=None):
     dist.init_process_group(backend=backend)
 
 
+def _init_dist_byteps():
+    bps.init()
+    if torch.cuda.is_available():
+        torch.cuda.set_device(bps.local_rank())
+
+
 def get_dist_info():
-    if dist.is_available() and dist.is_initialized():
-        rank = dist.get_rank()
-        world_size = dist.get_world_size()
-    else:
-        rank = 0
-        world_size = 1
+    try:
+        rank = bps.rank()
+        world_size = bps.size()
+    except ValueError:
+        if dist.is_available() and dist.is_initialized():
+            rank = dist.get_rank()
+            world_size = dist.get_world_size()
+        else:
+            rank = 0
+            world_size = 1
     return rank, world_size
 
 

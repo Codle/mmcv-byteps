@@ -2,6 +2,7 @@
 import logging
 
 import torch.distributed as dist
+import byteps.torch as bps
 
 logger_initialized = {}
 
@@ -52,10 +53,14 @@ def get_logger(name, log_file=None, log_level=logging.INFO, file_mode='w'):
     stream_handler = logging.StreamHandler()
     handlers = [stream_handler]
 
-    if dist.is_available() and dist.is_initialized():
-        rank = dist.get_rank()
-    else:
-        rank = 0
+    try:
+        rank = bps.local_rank()
+        bps.byteps_push_pull
+    except ValueError:
+        if dist.is_available() and dist.is_initialized():
+            rank = dist.get_rank()
+        else:
+            rank = 0
 
     # only rank 0 will add a FileHandler
     if rank == 0 and log_file is not None:

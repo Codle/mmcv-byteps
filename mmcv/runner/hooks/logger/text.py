@@ -5,13 +5,15 @@ import os.path as osp
 from collections import OrderedDict
 
 import torch
-import torch.distributed as dist
 
 import mmcv
 from mmcv.fileio.file_client import FileClient
 from mmcv.utils import is_tuple_of, scandir
 from ..hook import HOOKS
 from .base import LoggerHook
+
+# import byteps.torch as bps
+# import torch.distributed as dist
 
 
 @HOOKS.register_module()
@@ -112,8 +114,9 @@ class TextLoggerHook(LoggerHook):
         mem_mb = torch.tensor([int(mem) // (1024 * 1024)],
                               dtype=torch.int,
                               device=device)
-        if runner.world_size > 1:
-            dist.reduce(mem_mb, 0, op=dist.ReduceOp.MAX)
+        # if runner.world_size > 1:
+        #     dist.reduce(mem_mb, 0, op=dist.ReduceOp.MAX)
+        # mem_mb = torch.max(bps.allgather(mem_mb, 'mem_mb'), 0)
         return mem_mb.item()
 
     def _log_info(self, log_dict, runner):
